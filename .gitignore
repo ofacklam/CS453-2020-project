@@ -25,3 +25,6 @@
 !*.h++
 
 !*.py
+
+# Ignore cmake build folder
+cmake-build-debug/
