@@ -17,13 +17,14 @@
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE   200809L
 #ifdef __STDC_NO_ATOMICS__
-    #error Current C11 compiler does not support atomic operations
+#error Current C11 compiler does not support atomic operations
 #endif
 
 // External headers
 
 // Internal headers
 #include <tm.hpp>
+#include "memoryRegion.hpp"
 
 // -------------------------------------------------------------------------- //
 
@@ -32,10 +33,10 @@
 **/
 #undef likely
 #ifdef __GNUC__
-    #define likely(prop) \
+#define likely(prop) \
         __builtin_expect((prop) ? 1 : 0, 1)
 #else
-    #define likely(prop) \
+#define likely(prop) \
         (prop)
 #endif
 
@@ -44,10 +45,10 @@
 **/
 #undef unlikely
 #ifdef __GNUC__
-    #define unlikely(prop) \
+#define unlikely(prop) \
         __builtin_expect((prop) ? 1 : 0, 0)
 #else
-    #define unlikely(prop) \
+#define unlikely(prop) \
         (prop)
 #endif
 
@@ -56,11 +57,11 @@
 **/
 #undef as
 #ifdef __GNUC__
-    #define as(type...) \
+#define as(type...) \
         __attribute__((type))
 #else
-    #define as(type...)
-    #warning This compiler has no support for GCC attributes
+#define as(type...)
+#warning This compiler has no support for GCC attributes
 #endif
 
 // -------------------------------------------------------------------------- //
@@ -70,25 +71,31 @@
  * @param align Alignment (in bytes, must be a power of 2) that the shared memory region must support
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
-shared_t tm_create(size_t size as(unused), size_t align as(unused)) noexcept {
-    // TODO: tm_create(size_t, size_t)
-    return invalid_shared;
+shared_t tm_create(size_t size, size_t align) noexcept {
+    // Try to create a MemoryRegion object
+    try {
+        return new MemoryRegion(size, align);
+    } catch (std::exception &e) {
+        return invalid_shared;
+    }
 }
 
 /** Destroy (i.e. clean-up + free) a given shared memory region.
  * @param shared Shared memory region to destroy, with no running transaction
 **/
-void tm_destroy(shared_t shared as(unused)) noexcept {
-    // TODO: tm_destroy(shared_t)
+void tm_destroy(shared_t shared) noexcept {
+    // Delete the MemoryRegion object (destructor will free memory segments)
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    delete memReg;
 }
 
 /** [thread-safe] Return the start address of the first allocated segment in the shared memory region.
  * @param shared Shared memory region to query
  * @return Start address of the first allocated segment
 **/
-void* tm_start(shared_t shared as(unused)) noexcept {
-    // TODO: tm_start(shared_t)
-    return nullptr;
+void *tm_start(shared_t shared as(unused)) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    return memReg->firstSegment;
 }
 
 /** [thread-safe] Return the size (in bytes) of the first allocated segment of the shared memory region.
@@ -96,8 +103,8 @@ void* tm_start(shared_t shared as(unused)) noexcept {
  * @return First allocated segment size
 **/
 size_t tm_size(shared_t shared as(unused)) noexcept {
-    // TODO: tm_size(shared_t)
-    return 0;
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    return memReg->firstSegmentSize;
 }
 
 /** [thread-safe] Return the alignment (in bytes) of the memory accesses on the given shared memory region.
@@ -105,8 +112,8 @@ size_t tm_size(shared_t shared as(unused)) noexcept {
  * @return Alignment used globally
 **/
 size_t tm_align(shared_t shared as(unused)) noexcept {
-    // TODO: tm_align(shared_t)
-    return 0;
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    return memReg->alignment;
 }
 
 /** [thread-safe] Begin a new transaction on the given shared memory region.
