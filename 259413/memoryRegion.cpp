@@ -4,18 +4,25 @@
 
 #include "memoryRegion.hpp"
 
-MemoryRegion::MemoryRegion(size_t firstSegmentSize, size_t alignment) : firstSegmentSize(firstSegmentSize),
-                                                                        alignment(alignment) {
-    // Allocate a first shared segment
-    firstSegment = std::calloc(firstSegmentSize / alignment, alignment);
-    if (firstSegment == nullptr)
-        throw std::runtime_error("Could not allocate first segment");
+MemorySegment::MemorySegment(size_t size, size_t alignment) : size(size) {
+    // Allocate the segment, respecting the given alignment
+    data = std::calloc(size / alignment, alignment);
+    if (data == nullptr)
+        throw std::runtime_error("Could not allocate new segment");
 }
+
+void MemorySegment::free() {
+    std::free(data);
+    data = nullptr;
+}
+
+MemoryRegion::MemoryRegion(size_t firstSegmentSize, size_t alignment)
+        : firstSegment(firstSegmentSize, alignment), alignment(alignment) {}
 
 MemoryRegion::~MemoryRegion() {
     // Free all remaining segments & first segment
-    for (void *seg: segments) {
-        free(seg);
+    for (auto segElem: segments) {
+        segElem.second.free();
     }
-    free(firstSegment);
+    firstSegment.free();
 }

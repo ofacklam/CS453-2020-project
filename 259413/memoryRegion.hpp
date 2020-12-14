@@ -5,21 +5,29 @@
 #ifndef CS453_2020_PROJECT_MEMORYREGION_HPP
 #define CS453_2020_PROJECT_MEMORYREGION_HPP
 
-#include <unordered_set>
+#include <unordered_map>
 #include <cstdlib>
 #include <stdexcept>
 
+class MemorySegment {
+public:
+    void *data;
+    size_t size;
+
+    MemorySegment(size_t size, size_t alignment);
+
+    void free();
+};
 
 class MemoryRegion {
 private:
     /**
      * Store memory segment pointers
      */
-    std::unordered_set<void *> segments;
+    std::unordered_map<void *, MemorySegment> segments;
 
 public:
-    void *firstSegment;
-    size_t firstSegmentSize;
+    MemorySegment firstSegment;
     size_t alignment;
 
 public:
