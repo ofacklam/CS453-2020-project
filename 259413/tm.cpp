@@ -25,6 +25,7 @@
 // Internal headers
 #include <tm.hpp>
 #include "memoryRegion.hpp"
+#include "transaction.hpp"
 
 // -------------------------------------------------------------------------- //
 
@@ -95,7 +96,7 @@ void tm_destroy(shared_t shared) noexcept {
 **/
 void *tm_start(shared_t shared as(unused)) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
-    return memReg->firstSegment;
+    return memReg->firstSegment.data;
 }
 
 /** [thread-safe] Return the size (in bytes) of the first allocated segment of the shared memory region.
@@ -104,7 +105,7 @@ void *tm_start(shared_t shared as(unused)) noexcept {
 **/
 size_t tm_size(shared_t shared as(unused)) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
-    return memReg->firstSegmentSize;
+    return memReg->firstSegment.size;
 }
 
 /** [thread-safe] Return the alignment (in bytes) of the memory accesses on the given shared memory region.
@@ -121,9 +122,11 @@ size_t tm_align(shared_t shared as(unused)) noexcept {
  * @param is_ro  Whether the transaction is read-only
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
-tx_t tm_begin(shared_t shared as(unused), bool is_ro as(unused)) noexcept {
-    // TODO: tm_begin(shared_t)
-    return invalid_tx;
+tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    auto *tx = new Transaction(is_ro);
+    memReg->txs.insert(tx);
+    return (tx_t) tx;
 }
 
 /** [thread-safe] End the given transaction.
@@ -144,9 +147,10 @@ bool tm_end(shared_t shared as(unused), tx_t tx as(unused)) noexcept {
  * @param target Target start address (in a private region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_read(shared_t shared as(unused), tx_t tx as(unused), void const* source as(unused), size_t size as(unused), void* target as(unused)) noexcept {
-    // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
-    return false;
+bool tm_read(shared_t shared as(unused), tx_t tx, void const *source, size_t size, void *target) noexcept {
+    auto *transaction = reinterpret_cast<Transaction *>(tx);
+    Block toRead(reinterpret_cast<uintptr_t>(source), size, target);
+    return transaction->read(toRead);
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -157,9 +161,10 @@ bool tm_read(shared_t shared as(unused), tx_t tx as(unused), void const* source 
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_write(shared_t shared as(unused), tx_t tx as(unused), void const* source as(unused), size_t size as(unused), void* target as(unused)) noexcept {
-    // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
-    return false;
+bool tm_write(shared_t shared as(unused), tx_t tx, void const *source, size_t size, void *target) noexcept {
+    auto *transaction = reinterpret_cast<Transaction *>(tx);
+    Block toWrite(reinterpret_cast<uintptr_t>(target), size, const_cast<void *>(source));
+    return transaction->write(toWrite);
 }
 
 /** [thread-safe] Memory allocation in the given transaction.

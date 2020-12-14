@@ -6,8 +6,11 @@
 #define CS453_2020_PROJECT_MEMORYREGION_HPP
 
 #include <unordered_map>
+#include <unordered_set>
 #include <cstdlib>
 #include <stdexcept>
+
+class Transaction;
 
 class MemorySegment {
 public:
@@ -29,6 +32,11 @@ private:
 public:
     MemorySegment firstSegment;
     size_t alignment;
+
+    /**
+     * Pending transactions
+     */
+    std::unordered_set<Transaction *> txs;
 
 public:
     MemoryRegion(size_t firstSegmentSize, size_t alignment);
