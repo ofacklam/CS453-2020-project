@@ -38,14 +38,14 @@ bool MemoryRegion::lockedForWrite(const std::function<bool()> &writeOp) {
 }
 
 MemorySegment MemoryRegion::getMemorySegment(void *ptr) {
-    return segments[ptr];
+    return segments.at(ptr);
 }
 
 void MemoryRegion::addMemorySegment(MemorySegment segment) {
-    segments[segment.data] = segment;
+    segments.emplace(segment.data, segment);
 }
 
 void MemoryRegion::freeMemorySegment(void *ptr) {
-    segments[ptr].free();
+    segments.at(ptr).free();
     segments.erase(ptr);
 }

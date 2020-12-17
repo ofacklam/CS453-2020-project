@@ -51,7 +51,9 @@ public:
 
     Blocks intersect(Block block);
 
-    bool overlaps(Blocks blocks);
+    bool overlaps(Block block) const;
+
+    bool overlaps(const Blocks& otherBlocks);
 
     bool overlapsAny(const std::unordered_map<void *, MemorySegment> &segments) const;
 

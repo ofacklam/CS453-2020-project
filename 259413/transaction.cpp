@@ -83,7 +83,7 @@ Alloc Transaction::allocate(size_t size, size_t alignment, void **target) {
     try {
         MemorySegment segment(size, alignment);
         void *ptr = segment.data;
-        allocated[ptr] = segment;
+        allocated.emplace(ptr, segment);
         *target = ptr;
         return Alloc::success;
     } catch (std::exception &e) {
@@ -103,12 +103,12 @@ bool Transaction::free(MemoryRegion *memReg, void *segment) {
 
     // Check if freeing allocated segment, or shared segment
     if (allocated.count(segment) > 0) {
-        MemorySegment allocSeg = allocated[segment];
+        MemorySegment allocSeg = allocated.at(segment);
         allocSeg.free();
         allocated.erase(segment);
         return true;
     } else {
-        freed[segment] = memReg->getMemorySegment(segment);
+        freed.emplace(segment, memReg->getMemorySegment(segment));
         return true;
     }
 }
@@ -157,7 +157,7 @@ bool Transaction::updateSnapshot(Commit c) {
         for(auto s: c.freed) {
             if(freed.count(s.first) > 0)
                 return false;
-            freedByOthers[s.first] = s.second;
+            freedByOthers.emplace(s.first, s.second);
         }
         return true;
     }
