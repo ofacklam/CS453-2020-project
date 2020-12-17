@@ -145,7 +145,9 @@ bool Transaction::handleOutstandingCommits() {
 
 bool Transaction::updateSnapshot(Commit c) {
     if(isRO) {
-        for(auto b: c.written.blocks)
+        Blocks prevCache = writeCache;
+        writeCache = c.written;
+        for(auto b: prevCache.blocks)
             writeCache.add(b.second, true);
         return true;
     } else {

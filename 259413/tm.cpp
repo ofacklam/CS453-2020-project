@@ -94,7 +94,7 @@ void tm_destroy(shared_t shared) noexcept {
  * @param shared Shared memory region to query
  * @return Start address of the first allocated segment
 **/
-void *tm_start(shared_t shared as(unused)) noexcept {
+void *tm_start(shared_t shared) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     return memReg->firstSegment.data;
 }
@@ -103,7 +103,7 @@ void *tm_start(shared_t shared as(unused)) noexcept {
  * @param shared Shared memory region to query
  * @return First allocated segment size
 **/
-size_t tm_size(shared_t shared as(unused)) noexcept {
+size_t tm_size(shared_t shared) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     return memReg->firstSegment.size;
 }
@@ -112,7 +112,7 @@ size_t tm_size(shared_t shared as(unused)) noexcept {
  * @param shared Shared memory region to query
  * @return Alignment used globally
 **/
-size_t tm_align(shared_t shared as(unused)) noexcept {
+size_t tm_align(shared_t shared) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     return memReg->alignment;
 }
@@ -125,7 +125,10 @@ size_t tm_align(shared_t shared as(unused)) noexcept {
 tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *tx = new Transaction(is_ro);
-    memReg->txs.insert(tx);
+    memReg->lockedForWrite([memReg, tx]() {
+        memReg->txs.insert(tx);
+        return true;
+    });
     return (tx_t) tx;
 }
 
@@ -137,9 +140,12 @@ tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
 bool tm_end(shared_t shared, tx_t tx) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
-    return memReg->lockedForWrite([memReg, transaction]() {
+    bool success = memReg->lockedForWrite([memReg, transaction]() {
+        memReg->txs.erase(transaction);
         return transaction->commit(memReg);
     });
+    delete transaction;
+    return success;
 }
 
 /** [thread-safe] Read operation in the given transaction, source in the shared region and target in a private region.

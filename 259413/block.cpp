@@ -9,7 +9,7 @@ Block::Block(uintptr_t begin, size_t size, void *data, bool isOwner)
 
 Block Block::copy() const {
     void *cp = malloc(size);
-    std::memcpy(cp, data, size);
+    std::memcpy(cp, reinterpret_cast<void *>(begin), size);
     return Block(begin, size, cp, true);
 }
 
@@ -38,24 +38,25 @@ void Blocks::add(Block block, bool copyData) {
     // https://stackoverflow.com/a/41169879
     uintptr_t start;
     auto it = blocks.lower_bound(blockBegin);
-    if (it == blocks.end() || it == blocks.begin()) {
+    if (blocks.empty() || it == blocks.begin()) {
         start = blockBegin;
     } else {
         it--;
         auto prevEnd = it->second.begin + it->second.size;
-        start = blockBegin < prevEnd ? it->first : blockBegin;
+        start = blockBegin <= prevEnd ? it->first : blockBegin;
     }
 
     // Find end of combined block
     uintptr_t end;
     uintptr_t extBegin;
     it = blocks.lower_bound(blockEnd);
-    if (it == blocks.end() || (it->first > blockEnd && it == blocks.begin())) {
+    if (blocks.empty() || (it == blocks.begin() && it->first > blockEnd)) {
         end = blockEnd;
     } else {
-        auto extBlock = it->first == blockEnd ? it : --it;
-        extBegin = extBlock->second.begin;
-        auto extEnd = extBegin + extBlock->second.size;
+        if (it == blocks.end() || it->first > blockEnd)
+            it--;
+        extBegin = it->second.begin;
+        auto extEnd = extBegin + it->second.size;
         end = std::max(blockEnd, extEnd);
     }
 
@@ -77,9 +78,9 @@ void Blocks::add(Block block, bool copyData) {
     // Clean up all unused blocks
     block.free();
     it = blocks.lower_bound(start);
-    while (it->first < end) {
+    while (it != blocks.end() && it->first < end) {
         it->second.free();
-        blocks.erase(it);
+        it = blocks.erase(it);
     }
 
     // Create new block
@@ -96,9 +97,14 @@ Blocks Blocks::intersect(Block block) {
     for (auto elem: blocks) {
         Block b = elem.second;
         auto begin = b.begin;
-        if (begin >= blockBegin && begin < blockEnd) {
-            auto size = std::min(b.size, blockEnd - begin);
-            result.blocks.emplace(begin, Block(begin, size, b.data));
+        auto end = begin + b.size;
+
+        auto start = std::max(begin, blockBegin);
+        auto finish = std::min(end, blockEnd);
+        auto size = finish - start;
+        if (size > 0) {
+            auto data = static_cast<char*>(b.data);
+            result.blocks.emplace(start, Block(start, size, data + start - begin));
         }
     }
 
