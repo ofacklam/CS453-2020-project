@@ -103,24 +103,24 @@ Blocks Blocks::intersect(Block block) {
         auto finish = std::min(end, blockEnd);
         auto size = finish - start;
         if (size > 0) {
-            auto data = static_cast<char*>(b.data);
+            auto data = static_cast<char *>(b.data);
             result.blocks.emplace(start, Block(start, size, data + start - begin));
         }
     }
 
     // Fill in gaps with shared blocks
-    uintptr_t current = blockBegin;
-    while (current < blockEnd) {
-        auto it = result.blocks.lower_bound(current);
-        if (it == result.blocks.end()) {
-            result.blocks.emplace(current, Block(current, blockEnd - current, reinterpret_cast<void *>(current)));
-            break;
-        }
+    auto it = result.blocks.begin();
+    auto begin = it == result.blocks.end() ? blockEnd : it->first;
+    if (blockBegin < begin)
+        result.blocks.emplace(blockBegin, Block(blockBegin, begin - blockBegin, reinterpret_cast<void *>(blockBegin)));
 
-        if (current < it->first) {
-            result.blocks.emplace(current, Block(current, it->first - current, reinterpret_cast<void *>(current)));
-        }
-        current = it->first + it->second.size;
+    while (it != result.blocks.end()) {
+        auto end = it->first + it->second.size;
+        auto next = std::next(it);
+        auto nextBegin = next == result.blocks.end() ? blockEnd : next->first;
+        if(nextBegin > end)
+            result.blocks.emplace(end, Block(end, nextBegin - end, reinterpret_cast<void *>(end)));
+        it++;
     }
 
     return result;
