@@ -4,11 +4,22 @@
 
 #include "transaction.hpp"
 
+#include <utility>
+
+Commit::Commit(Blocks written, std::unordered_map<void *, MemorySegment> freed)
+        : written(std::move(written)), freed(std::move(freed)) {}
+
 Transaction::Transaction(bool isRo) : isRO(isRo), isAborted(false) {}
 
 bool Transaction::read(Block toRead) {
-    if (isAborted)
+    if (isAborted || !handleOutstandingCommits())
         return false;
+
+    // Check intersection with freed up segments
+    if (!isRO && toRead.containedInAny(freedByOthers)) {
+        abort();
+        return false;
+    }
 
     // Intersect block with write cache, then copy out data
     Blocks source = writeCache.intersect(toRead);
@@ -32,17 +43,21 @@ bool Transaction::read(Block toRead) {
 }
 
 bool Transaction::write(Block toWrite) {
-    if(isAborted)
+    if (isAborted || !handleOutstandingCommits())
         return false;
+
+    // Check intersection with freed-up segments
+    if (toWrite.containedInAny(freedByOthers)) {
+        abort();
+        return false;
+    }
 
     // Check if write is in a newly allocated segment, or a shared segment
     for (auto segElem: allocated) {
         auto segment = segElem.second;
-        auto segBegin = reinterpret_cast<uintptr_t>(segment.data);
-        uintptr_t segEnd = segBegin + segment.size;
 
         // it is in this segment --> write directly
-        if (toWrite.begin >= segBegin && toWrite.begin < segEnd) {
+        if (toWrite.containedIn(segment)) {
             std::memcpy(reinterpret_cast<void *>(toWrite.begin), toWrite.data, toWrite.size);
             return true;
         }
@@ -51,4 +66,77 @@ bool Transaction::write(Block toWrite) {
     // Not an allocated segment --> add write block to write cache
     writeCache.add(toWrite, true);
     return true;
+}
+
+Alloc Transaction::allocate(size_t size, size_t alignment, void **target) {
+    if (isAborted || !handleOutstandingCommits())
+        return Alloc::abort;
+
+    // Try creating new segment
+    try {
+        MemorySegment segment(size, alignment);
+        void *ptr = segment.data;
+        allocated[ptr] = segment;
+        *target = ptr;
+        return Alloc::success;
+    } catch (std::exception &e) {
+        return Alloc::nomem;
+    }
+}
+
+bool Transaction::free(MemoryRegion *memReg, void *segment) {
+    if (isAborted || !handleOutstandingCommits())
+        return false;
+
+    // Check intersection with freed-up segments
+    if (freedByOthers.count(segment) > 0) {
+        abort();
+        return false;
+    }
+
+    // Check if freeing allocated segment, or shared segment
+    if (allocated.count(segment) > 0) {
+        MemorySegment allocSeg = allocated[segment];
+        allocSeg.free();
+        allocated.erase(segment);
+        return true;
+    } else {
+        freed[segment] = memReg->getMemorySegment(segment);
+        return true;
+    }
+}
+
+void Transaction::handleNewCommit(Blocks written, std::unordered_map<void *, MemorySegment> freedByOther) {
+    std::unique_lock lock(commitMutex);
+
+    if (isRO)
+        written = written.copy();
+
+    outstandingCommits.push(Commit(written, std::move(freedByOther)));
+}
+
+bool Transaction::handleOutstandingCommits() {
+    std::unique_lock lock(commitMutex);
+
+    while (!outstandingCommits.empty()) {
+        Commit c = outstandingCommits.front();
+        outstandingCommits.pop();
+        if (!updateSnapshot(c)) {
+            abort();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Transaction::updateSnapshot(Commit c) {
+    return false;
+}
+
+void Transaction::commit(std::unordered_set<Transaction *> &otherTXs) {
+
+}
+
+void Transaction::abort() {
+    isAborted = true;
 }

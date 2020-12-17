@@ -26,3 +26,17 @@ MemoryRegion::~MemoryRegion() {
     }
     firstSegment.free();
 }
+
+bool MemoryRegion::lockedForRead(const std::function<bool()>& readOp) {
+    std::shared_lock lock(sharedMutex);
+    return readOp();
+}
+
+bool MemoryRegion::lockedForWrite(const std::function<bool()> &writeOp) {
+    std::unique_lock lock(sharedMutex);
+    return writeOp();
+}
+
+MemorySegment MemoryRegion::getMemorySegment(void *ptr) {
+    return segments[ptr];
+}

@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <cstdlib>
 #include <stdexcept>
+#include <shared_mutex>
+#include <functional>
 
 class Transaction;
 
@@ -29,6 +31,11 @@ private:
      */
     std::unordered_map<void *, MemorySegment> segments;
 
+    /**
+     * Mutex to lock for reading / writing shared memory (when reading or committing)
+     */
+     std::shared_mutex sharedMutex;
+
 public:
     MemorySegment firstSegment;
     size_t alignment;
@@ -42,6 +49,12 @@ public:
     MemoryRegion(size_t firstSegmentSize, size_t alignment);
 
     virtual ~MemoryRegion();
+
+    bool lockedForRead(const std::function<bool()>& readOp);
+
+    bool lockedForWrite(const std::function<bool()>& writeOp);
+
+    MemorySegment getMemorySegment(void *ptr);
 };
 
 

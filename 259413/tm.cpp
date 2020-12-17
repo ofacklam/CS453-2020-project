@@ -147,10 +147,13 @@ bool tm_end(shared_t shared as(unused), tx_t tx as(unused)) noexcept {
  * @param target Target start address (in a private region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_read(shared_t shared as(unused), tx_t tx, void const *source, size_t size, void *target) noexcept {
+bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size, void *target) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     Block toRead(reinterpret_cast<uintptr_t>(source), size, target);
-    return transaction->read(toRead);
+    return memReg->lockedForRead([transaction, toRead]() {
+        return transaction->read(toRead);
+    });
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -163,6 +166,7 @@ bool tm_read(shared_t shared as(unused), tx_t tx, void const *source, size_t siz
 **/
 bool tm_write(shared_t shared as(unused), tx_t tx, void const *source, size_t size, void *target) noexcept {
     auto *transaction = reinterpret_cast<Transaction *>(tx);
+    // const cast https://stackoverflow.com/a/123995
     Block toWrite(reinterpret_cast<uintptr_t>(target), size, const_cast<void *>(source));
     return transaction->write(toWrite);
 }
@@ -174,9 +178,10 @@ bool tm_write(shared_t shared as(unused), tx_t tx, void const *source, size_t si
  * @param target Pointer in private memory receiving the address of the first byte of the newly allocated, aligned segment
  * @return Whether the whole transaction can continue (success/nomem), or not (abort_alloc)
 **/
-Alloc tm_alloc(shared_t shared as(unused), tx_t tx as(unused), size_t size as(unused), void** target as(unused)) noexcept {
-    // TODO: tm_alloc(shared_t, tx_t, size_t, void**)
-    return Alloc::abort;
+Alloc tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    auto *transaction = reinterpret_cast<Transaction *>(tx);
+    return transaction->allocate(size, memReg->alignment, target);
 }
 
 /** [thread-safe] Memory freeing in the given transaction.
@@ -185,7 +190,10 @@ Alloc tm_alloc(shared_t shared as(unused), tx_t tx as(unused), size_t size as(un
  * @param target Address of the first byte of the previously allocated segment to deallocate
  * @return Whether the whole transaction can continue
 **/
-bool tm_free(shared_t shared as(unused), tx_t tx as(unused), void* target as(unused)) noexcept {
-    // TODO: tm_free(shared_t, tx_t, void*)
-    return false;
+bool tm_free(shared_t shared, tx_t tx, void *target) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    auto *transaction = reinterpret_cast<Transaction *>(tx);
+    return memReg->lockedForRead([memReg, transaction, target]() {
+        return transaction->free(memReg, target);
+    });
 }
