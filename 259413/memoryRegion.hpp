@@ -47,6 +47,8 @@ public:
 
     MemorySegment getMemorySegment(void *ptr);
 
+    MemorySegment findMemorySegment(void *ptr);
+
     void addMemorySegment(MemorySegment segment);
 
     void freeMemorySegment(void *ptr);

@@ -42,7 +42,7 @@ public:
 };
 
 class Blocks {
-private:
+public:
     size_t alignment;
 
 public:
@@ -63,6 +63,8 @@ public:
     bool overlaps(const Blocks& otherBlocks);
 
     bool overlapsAny(const std::unordered_map<void *, MemorySegment> &segments) const;
+
+    uintptr_t contains(Block block) const;
 
     Blocks copy() const;
 

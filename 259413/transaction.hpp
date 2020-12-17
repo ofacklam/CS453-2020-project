@@ -50,7 +50,7 @@ public:
 
     virtual ~Transaction();
 
-    bool read(Block toRead);
+    bool read(Block toRead, const std::function<bool(std::function<bool()>)> &lockedForRead);
 
     bool write(Block toWrite);
 
@@ -58,10 +58,13 @@ public:
 
     bool free(void *segment, std::function<MemorySegment(void *)> getMemorySegment);
 
-    void handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freed);
+    void handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freed,
+                         const std::function<MemorySegment(void *)> &findMemorySegment);
 
-    bool commit(const std::unordered_set<Transaction *> &txs, std::function<void(MemorySegment)> addMemorySegment,
-                std::function<void(void *)> freeMemorySegment);
+    bool commit(const std::unordered_set<Transaction *> &txs,
+                const std::function<void(MemorySegment)> &addMemorySegment,
+                const std::function<void(void *)> &freeMemorySegment,
+                const std::function<MemorySegment(void *)> &findMemorySegment);
 
     void abort();
 };

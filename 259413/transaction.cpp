@@ -19,35 +19,61 @@ Transaction::~Transaction() {
     writeCache.free();
 }
 
-bool Transaction::read(Block toRead) {
-    if (isAborted || !handleOutstandingCommits())
-        return false;
-
-    // Check intersection with freed up segments
-    if (!isRO && toRead.containedInAny(freedByOthers)) {
-        abort();
-        return false;
+bool Transaction::read(Block toRead, const std::function<bool(std::function<bool()>)> &lockedForRead) {
+    // Shortcut for read-only TX
+    if (isRO) {
+        auto begin = writeCache.contains(toRead);
+        if (begin > 0) {
+            Block b = writeCache.blocks.at(begin);
+            auto offset = toRead.begin - b.begin;
+            std::memcpy(toRead.data, static_cast<char *>(b.data) + offset, toRead.size);
+            return true;
+        }
     }
 
-    // Intersect block with write cache, then copy out data
-    Blocks source = writeCache.intersect(toRead);
-    char *dst = static_cast<char *>(toRead.data);
-    for (auto elem: source.blocks) {
-        Block blk = elem.second;
-        void *src = blk.data;
-        size_t size = blk.size;
+    // Else we need lock
+    return lockedForRead([this, toRead]() {
+        if (isAborted || !handleOutstandingCommits())
+            return false;
 
-        std::memcpy(dst, src, size);
-        dst += size;
-    }
+        // Check intersection with freed up segments
+        if (!isRO && toRead.containedInAny(freedByOthers)) {
+            abort();
+            return false;
+        }
 
-    // If not read-only, add read block to read cache
-    if (!isRO) {
-        toRead.data = nullptr;
-        readCache.add(toRead, false);
-    }
+        // Intersect block with write cache, then copy out data
+        Blocks source = writeCache.intersect(toRead);
+        char *dst = static_cast<char *>(toRead.data);
 
-    return true;
+        uintptr_t current = toRead.begin;
+        for (auto elem: source.blocks) {
+            Block blk = elem.second;
+            uintptr_t begin = blk.begin;
+            void *src = blk.data;
+            size_t size = blk.size;
+
+            if (current < begin) {
+                std::memcpy(dst + current - toRead.begin, reinterpret_cast<void *>(current), begin - current);
+                current = begin;
+            }
+
+            std::memcpy(dst + current - toRead.begin, src, size);
+            current += size;
+        }
+
+        auto end = toRead.begin + toRead.size;
+        if (current < end)
+            std::memcpy(dst + current - toRead.begin, reinterpret_cast<void *>(current), end - current);
+
+        // If not read-only, add read block to read cache
+        if (!isRO) {
+            //toRead.data = nullptr;
+            readCache.add(toRead, false);
+        }
+
+        return true;
+    });
 }
 
 bool Transaction::write(Block toWrite) {
@@ -114,11 +140,17 @@ bool Transaction::free(void *segment, std::function<MemorySegment(void *)> getMe
     }
 }
 
-void Transaction::handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freedByOther) {
+void Transaction::handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freedByOther,
+                                  const std::function<MemorySegment(void *)> &findMemorySegment) {
     std::unique_lock lock(commitMutex);
 
     if (isRO) {
-        Blocks modified = written.copy();
+        Blocks modified(written.alignment);
+        for (auto elem: written.blocks) {
+            auto segment = findMemorySegment(reinterpret_cast<void *>(elem.second.begin));
+            auto begin = reinterpret_cast<uintptr_t>(segment.data);
+            modified.add(Block(begin, segment.size, segment.data), true);
+        }
         for (auto elem: freedByOther) {
             auto segment = elem.second;
             auto begin = reinterpret_cast<uintptr_t>(segment.data);
@@ -167,8 +199,10 @@ bool Transaction::updateSnapshot(Commit c) {
 }
 
 bool
-Transaction::commit(const std::unordered_set<Transaction *> &txs, std::function<void(MemorySegment)> addMemorySegment,
-                    std::function<void(void *)> freeMemorySegment) {
+Transaction::commit(const std::unordered_set<Transaction *> &txs,
+                    const std::function<void(MemorySegment)> &addMemorySegment,
+                    const std::function<void(void *)> &freeMemorySegment,
+                    const std::function<MemorySegment(void *)> &findMemorySegment) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
@@ -178,7 +212,7 @@ Transaction::commit(const std::unordered_set<Transaction *> &txs, std::function<
     // Let all other transactions handle this new commit
     for (auto tx: txs) {
         if (tx != this)
-            tx->handleNewCommit(writeCache, freed);
+            tx->handleNewCommit(writeCache, freed, findMemorySegment);
     }
 
     // Add allocated segments

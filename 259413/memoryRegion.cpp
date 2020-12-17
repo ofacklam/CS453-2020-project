@@ -15,7 +15,7 @@ MemoryRegion::~MemoryRegion() {
     firstSegment.free();
 }
 
-bool MemoryRegion::lockedForRead(const std::function<bool()>& readOp) {
+bool MemoryRegion::lockedForRead(const std::function<bool()> &readOp) {
     std::shared_lock lock(sharedMutex);
     return readOp();
 }
@@ -27,6 +27,21 @@ bool MemoryRegion::lockedForWrite(const std::function<bool()> &writeOp) {
 
 MemorySegment MemoryRegion::getMemorySegment(void *ptr) {
     return segments.at(ptr);
+}
+
+MemorySegment MemoryRegion::findMemorySegment(void *ptr) {
+    auto firstBegin = static_cast<char *>(firstSegment.data);
+    if (firstBegin <= ptr && ptr < firstBegin + firstSegment.size)
+        return firstSegment;
+
+    for (auto elem: segments) {
+        auto segment = elem.second;
+        auto begin = static_cast<char *>(segment.data);
+        if (begin <= ptr && ptr < begin + segment.size)
+            return segment;
+    }
+
+    throw std::runtime_error("Memory segment missing");
 }
 
 void MemoryRegion::addMemorySegment(MemorySegment segment) {

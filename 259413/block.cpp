@@ -115,7 +115,7 @@ Blocks Blocks::intersect(Block block) {
     }
 
     // Fill in gaps with shared blocks
-    auto it = result.blocks.begin();
+    /*auto it = result.blocks.begin();
     auto begin = it == result.blocks.end() ? blockEnd : it->first;
     if (blockBegin < begin)
         result.blocks.emplace(blockBegin, Block(blockBegin, begin - blockBegin, reinterpret_cast<void *>(blockBegin)));
@@ -127,7 +127,7 @@ Blocks Blocks::intersect(Block block) {
         if (nextBegin > end)
             result.blocks.emplace(end, Block(end, nextBegin - end, reinterpret_cast<void *>(end)));
         it++;
-    }
+    }*/
 
     return result;
 }
@@ -159,6 +159,15 @@ bool Blocks::overlapsAny(const std::unordered_map<void *, MemorySegment> &segmen
     return std::any_of(blocks.begin(), blocks.end(), [segments](std::pair<uintptr_t, Block> elem) {
         return elem.second.containedInAny(segments);
     });
+}
+
+uintptr_t Blocks::contains(Block block) const {
+    for(auto elem: blocks) {
+        Block b = elem.second;
+        if(b.begin <= block.begin && b.begin + b.size >= block.begin + block.size)
+            return b.begin;
+    }
+    return 0;
 }
 
 Blocks Blocks::copy() const {
