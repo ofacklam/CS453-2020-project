@@ -67,10 +67,10 @@ void Blocks::add(Block block, bool copyData) {
     }
 
     // Copy data if needed
-    char *data = nullptr;
-    if (copyData) {
-        size_t size = end - start;
-        data = static_cast<char *>(malloc(size));
+    size_t size = end - start;
+    char *data = static_cast<char *>(block.data);
+    if (copyData && (!block.ownsData() || size > block.size)) {
+        data = static_cast<char *>(aligned_alloc(alignment, size));
 
         if (start < blockBegin)
             std::memcpy(data, blocks.at(start).data, blockBegin - start);
@@ -79,10 +79,11 @@ void Blocks::add(Block block, bool copyData) {
                         static_cast<char *>(blocks.at(extBegin).data) + blockEnd - extBegin,
                         end - blockEnd);
         std::memcpy(data + blockBegin - start, block.data, block.size);
+
+        block.free();
     }
 
     // Clean up all unused blocks
-    block.free();
     it = blocks.lower_bound(start);
     while (it != blocks.end() && it->first < end) {
         it->second.free();
@@ -90,7 +91,7 @@ void Blocks::add(Block block, bool copyData) {
     }
 
     // Create new block
-    Block combined(start, end - start, data, copyData);
+    Block combined(start, size, data, copyData);
     blocks.emplace(start, combined);
 }
 
@@ -132,14 +133,20 @@ Blocks Blocks::intersect(Block block) {
 }
 
 bool Blocks::overlaps(Block block) const {
-    auto it = blocks.lower_bound(block.begin);
+    /*auto it = blocks.lower_bound(block.begin);
     bool disjointNext = it == blocks.end() || it->first >= block.begin + block.size;
     bool disjointPrev = it == blocks.end() || it == blocks.begin();
     if (!disjointPrev) {
         it--;
         disjointPrev |= it->first + it->second.size <= block.begin;
     }
-    return !disjointNext || !disjointPrev;
+    return !disjointNext || !disjointPrev;*/
+    for(auto elem: blocks) {
+        Block b = elem.second;
+        if(b.begin < block.begin + block.size && block.begin < b.begin + b.size)
+            return true;
+    }
+    return false;
 }
 
 bool Blocks::overlaps(const Blocks &otherBlocks) {

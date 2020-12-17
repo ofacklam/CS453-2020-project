@@ -7,13 +7,15 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <cstring>
 #include <queue>
 #include <cassert>
+#include <mutex>
 
 #include "tm.hpp"
-#include "memoryRegion.hpp"
 #include "block.hpp"
+#include "memorySegment.hpp"
 
 class Commit {
 public:
@@ -54,11 +56,12 @@ public:
 
     Alloc allocate(size_t size, size_t alignment, void **target);
 
-    bool free(MemoryRegion *memReg, void *segment);
+    bool free(void *segment, std::function<MemorySegment(void *)> getMemorySegment);
 
     void handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freed);
 
-    bool commit(MemoryRegion *memReg);
+    bool commit(const std::unordered_set<Transaction *> &txs, std::function<void(MemorySegment)> addMemorySegment,
+                std::function<void(void *)> freeMemorySegment);
 
     void abort();
 };

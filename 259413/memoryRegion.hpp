@@ -12,17 +12,8 @@
 #include <shared_mutex>
 #include <functional>
 
-class Transaction;
-
-class MemorySegment {
-public:
-    void *data;
-    size_t size;
-
-    MemorySegment(size_t size, size_t alignment);
-
-    void free();
-};
+#include "transaction.hpp"
+#include "memorySegment.hpp"
 
 class MemoryRegion {
 private:
@@ -59,6 +50,8 @@ public:
     void addMemorySegment(MemorySegment segment);
 
     void freeMemorySegment(void *ptr);
+
+    void deleteTransaction(Transaction *tx);
 };
 
 

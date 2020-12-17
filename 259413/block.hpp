@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include "memoryRegion.hpp"
+#include "memorySegment.hpp"
 
 class Block {
 private:

@@ -92,7 +92,7 @@ Alloc Transaction::allocate(size_t size, size_t alignment, void **target) {
     }
 }
 
-bool Transaction::free(MemoryRegion *memReg, void *segment) {
+bool Transaction::free(void *segment, std::function<MemorySegment(void *)> getMemorySegment) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
@@ -109,7 +109,7 @@ bool Transaction::free(MemoryRegion *memReg, void *segment) {
         allocated.erase(segment);
         return true;
     } else {
-        freed.emplace(segment, memReg->getMemorySegment(segment));
+        freed.emplace(segment, getMemorySegment(segment));
         return true;
     }
 }
@@ -152,8 +152,6 @@ bool Transaction::updateSnapshot(Commit c) {
             writeCache.add(b.second, true);
         return true;
     } else {
-        Blocks rc = readCache;
-        Blocks wc = writeCache;
         if (c.written.overlaps(readCache))
             return false;
         if (writeCache.overlapsAny(c.freed) || readCache.overlapsAny(c.freed))
@@ -168,7 +166,9 @@ bool Transaction::updateSnapshot(Commit c) {
     }
 }
 
-bool Transaction::commit(MemoryRegion *memReg) {
+bool
+Transaction::commit(const std::unordered_set<Transaction *> &txs, std::function<void(MemorySegment)> addMemorySegment,
+                    std::function<void(void *)> freeMemorySegment) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
@@ -176,14 +176,14 @@ bool Transaction::commit(MemoryRegion *memReg) {
         return true;
 
     // Let all other transactions handle this new commit
-    for (auto tx: memReg->txs) {
+    for (auto tx: txs) {
         if (tx != this)
             tx->handleNewCommit(writeCache, freed);
     }
 
     // Add allocated segments
     for (auto newSegment: allocated) {
-        memReg->addMemorySegment(newSegment.second);
+        addMemorySegment(newSegment.second);
     }
 
     // Write contents of writeCache
@@ -194,7 +194,7 @@ bool Transaction::commit(MemoryRegion *memReg) {
 
     // Free "freed" segments
     for (auto freedSegment: freed) {
-        memReg->freeMemorySegment(freedSegment.first);
+        freeMemorySegment(freedSegment.first);
     }
 
     return true;
@@ -206,12 +206,11 @@ void Transaction::abort() {
         s.second.free();
 
     // Free outstanding commits
-    if (isRO) {
-        while (!outstandingCommits.empty()) {
-            auto c = outstandingCommits.front();
-            outstandingCommits.pop();
+    while (!outstandingCommits.empty()) {
+        auto c = outstandingCommits.front();
+        outstandingCommits.pop();
+        if (isRO)
             c.written.free();
-        }
     }
 
     isAborted = true;

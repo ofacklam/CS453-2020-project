@@ -4,18 +4,6 @@
 
 #include "memoryRegion.hpp"
 
-MemorySegment::MemorySegment(size_t size, size_t alignment) : size(size) {
-    // Allocate the segment, respecting the given alignment
-    data = std::calloc(size / alignment, alignment);
-    if (data == nullptr)
-        throw std::runtime_error("Could not allocate new segment");
-}
-
-void MemorySegment::free() {
-    std::free(data);
-    data = nullptr;
-}
-
 MemoryRegion::MemoryRegion(size_t firstSegmentSize, size_t alignment)
         : firstSegment(firstSegmentSize, alignment), alignment(alignment) {}
 
@@ -48,4 +36,12 @@ void MemoryRegion::addMemorySegment(MemorySegment segment) {
 void MemoryRegion::freeMemorySegment(void *ptr) {
     segments.at(ptr).free();
     segments.erase(ptr);
+}
+
+void MemoryRegion::deleteTransaction(Transaction *tx) {
+    lockedForWrite([tx, this]() {
+        delete tx;
+        this->txs.erase(tx);
+        return true;
+    });
 }

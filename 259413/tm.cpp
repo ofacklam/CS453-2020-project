@@ -124,7 +124,7 @@ size_t tm_align(shared_t shared) noexcept {
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
-    auto *tx = new Transaction(is_ro, memReg->alignment);
+    auto *tx = new Transaction(false, memReg->alignment);
     memReg->lockedForWrite([memReg, tx]() {
         memReg->txs.insert(tx);
         return true;
@@ -142,7 +142,11 @@ bool tm_end(shared_t shared, tx_t tx) noexcept {
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     bool success = memReg->lockedForWrite([memReg, transaction]() {
         memReg->txs.erase(transaction);
-        return transaction->commit(memReg);
+        return transaction->commit(
+                memReg->txs,
+                [memReg](MemorySegment seg) { memReg->addMemorySegment(seg); },
+                [memReg](void *ptr) { memReg->freeMemorySegment(ptr); }
+        );
     });
     delete transaction;
     return success;
@@ -160,9 +164,12 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size, void *ta
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     Block toRead(reinterpret_cast<uintptr_t>(source), size, target);
-    return memReg->lockedForRead([transaction, toRead]() {
+    bool success = memReg->lockedForRead([transaction, toRead]() {
         return transaction->read(toRead);
     });
+    if (!success)
+        memReg->deleteTransaction(transaction);
+    return success;
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -173,11 +180,15 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size, void *ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_write(shared_t shared as(unused), tx_t tx, void const *source, size_t size, void *target) noexcept {
+bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size, void *target) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     // const cast https://stackoverflow.com/a/123995
     Block toWrite(reinterpret_cast<uintptr_t>(target), size, const_cast<void *>(source));
-    return transaction->write(toWrite);
+    bool success = transaction->write(toWrite);
+    if (!success)
+        memReg->deleteTransaction(transaction);
+    return success;
 }
 
 /** [thread-safe] Memory allocation in the given transaction.
@@ -190,7 +201,10 @@ bool tm_write(shared_t shared as(unused), tx_t tx, void const *source, size_t si
 Alloc tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
-    return transaction->allocate(size, memReg->alignment, target);
+    auto success = transaction->allocate(size, memReg->alignment, target);
+    if (success == Alloc::abort)
+        memReg->deleteTransaction(transaction);
+    return success;
 }
 
 /** [thread-safe] Memory freeing in the given transaction.
@@ -202,7 +216,12 @@ Alloc tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) noexcept {
 bool tm_free(shared_t shared, tx_t tx, void *target) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
-    return memReg->lockedForRead([memReg, transaction, target]() {
-        return transaction->free(memReg, target);
+    bool success = memReg->lockedForRead([memReg, transaction, target]() {
+        return transaction->free(target, [memReg](void *ptr) {
+            return memReg->getMemorySegment(ptr);
+        });
     });
+    if (!success)
+        memReg->deleteTransaction(transaction);
+    return success;
 }
