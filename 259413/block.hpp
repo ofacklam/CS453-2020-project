@@ -31,10 +31,12 @@ public:
     Block(uintptr_t begin, size_t size, void *data, bool isOwner = false);
 
     Block copy() const;
+
     void free();
 
     bool containedIn(MemorySegment segment) const;
-    bool containedInAny(const std::unordered_map<void *, MemorySegment>& segments) const;
+
+    bool containedInAny(const std::unordered_map<void *, MemorySegment> &segments) const;
 };
 
 class Blocks {
@@ -46,10 +48,16 @@ public:
 
 public:
     void add(Block block, bool copyData);
+
     Blocks intersect(Block block);
-    bool overlaps(Block block);
-    bool overlapsAny(const std::unordered_map<void *, MemorySegment>& segments) const;
+
+    bool overlaps(Blocks blocks);
+
+    bool overlapsAny(const std::unordered_map<void *, MemorySegment> &segments) const;
+
     Blocks copy() const;
+
+    void free();
 };
 
 

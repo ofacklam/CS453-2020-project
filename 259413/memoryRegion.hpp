@@ -55,6 +55,10 @@ public:
     bool lockedForWrite(const std::function<bool()>& writeOp);
 
     MemorySegment getMemorySegment(void *ptr);
+
+    void addMemorySegment(MemorySegment segment);
+
+    void freeMemorySegment(void *ptr);
 };
 
 

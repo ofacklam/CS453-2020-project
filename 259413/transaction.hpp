@@ -15,10 +15,13 @@
 #include "block.hpp"
 
 class Commit {
+public:
     Blocks written;
     std::unordered_map<void *, MemorySegment> freed;
 
 public:
+    explicit Commit(Blocks written);
+
     Commit(Blocks written, std::unordered_map<void *, MemorySegment> freed);
 };
 
@@ -42,6 +45,8 @@ private:
 public:
     explicit Transaction(bool isRo);
 
+    virtual ~Transaction();
+
     bool read(Block toRead);
 
     bool write(Block toWrite);
@@ -50,9 +55,9 @@ public:
 
     bool free(MemoryRegion *memReg, void *segment);
 
-    void handleNewCommit(Blocks written, std::unordered_map<void *, MemorySegment> freed);
+    void handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freed);
 
-    void commit(std::unordered_set<Transaction *>& otherTXs);
+    bool commit(MemoryRegion *memReg);
 
     void abort();
 };

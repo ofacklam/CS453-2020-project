@@ -134,9 +134,12 @@ tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
 **/
-bool tm_end(shared_t shared as(unused), tx_t tx as(unused)) noexcept {
-    // TODO: tm_end(shared_t, tx_t)
-    return false;
+bool tm_end(shared_t shared, tx_t tx) noexcept {
+    auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
+    auto *transaction = reinterpret_cast<Transaction *>(tx);
+    return memReg->lockedForWrite([memReg, transaction]() {
+        return transaction->commit(memReg);
+    });
 }
 
 /** [thread-safe] Read operation in the given transaction, source in the shared region and target in a private region.

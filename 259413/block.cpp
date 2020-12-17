@@ -37,3 +37,8 @@ Blocks Blocks::copy() const {
     }
     return result;
 }
+
+void Blocks::free() {
+    for(auto b: blocks)
+        b.second.free();
+}
