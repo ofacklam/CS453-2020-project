@@ -11,7 +11,8 @@ Commit::Commit(Blocks written, std::unordered_map<void *, MemorySegment> freed)
 
 Commit::Commit(Blocks written) : written(std::move(written)) {}
 
-Transaction::Transaction(bool isRo) : isRO(isRo), isAborted(false) {}
+Transaction::Transaction(bool isRo, size_t alignment)
+        : readCache(alignment), writeCache(alignment), isRO(isRo), isAborted(false) {}
 
 Transaction::~Transaction() {
     readCache.free();
@@ -113,12 +114,12 @@ bool Transaction::free(MemoryRegion *memReg, void *segment) {
     }
 }
 
-void Transaction::handleNewCommit(const Blocks& written, std::unordered_map<void *, MemorySegment> freedByOther) {
+void Transaction::handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freedByOther) {
     std::unique_lock lock(commitMutex);
 
     if (isRO) {
         Blocks modified = written.copy();
-        for(auto elem: freedByOther) {
+        for (auto elem: freedByOther) {
             auto segment = elem.second;
             auto begin = reinterpret_cast<uintptr_t>(segment.data);
             modified.add(Block(begin, segment.size, segment.data), true);
@@ -144,20 +145,22 @@ bool Transaction::handleOutstandingCommits() {
 }
 
 bool Transaction::updateSnapshot(Commit c) {
-    if(isRO) {
+    if (isRO) {
         Blocks prevCache = writeCache;
         writeCache = c.written;
-        for(auto b: prevCache.blocks)
+        for (auto b: prevCache.blocks)
             writeCache.add(b.second, true);
         return true;
     } else {
-        if(c.written.overlaps(readCache))
+        Blocks rc = readCache;
+        Blocks wc = writeCache;
+        if (c.written.overlaps(readCache))
             return false;
-        if(writeCache.overlapsAny(c.freed) || readCache.overlapsAny(c.freed))
+        if (writeCache.overlapsAny(c.freed) || readCache.overlapsAny(c.freed))
             return false;
 
-        for(auto s: c.freed) {
-            if(freed.count(s.first) > 0)
+        for (auto s: c.freed) {
+            if (freed.count(s.first) > 0)
                 return false;
             freedByOthers.emplace(s.first, s.second);
         }
@@ -169,25 +172,28 @@ bool Transaction::commit(MemoryRegion *memReg) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
+    if (isRO)
+        return true;
+
     // Let all other transactions handle this new commit
-    for(auto tx: memReg->txs) {
-        if(tx != this)
+    for (auto tx: memReg->txs) {
+        if (tx != this)
             tx->handleNewCommit(writeCache, freed);
     }
 
     // Add allocated segments
-    for(auto newSegment: allocated) {
+    for (auto newSegment: allocated) {
         memReg->addMemorySegment(newSegment.second);
     }
 
     // Write contents of writeCache
-    for(auto elem: writeCache.blocks) {
+    for (auto elem: writeCache.blocks) {
         Block b = elem.second;
-        std::memcpy(reinterpret_cast<void*>(b.begin), b.data, b.size);
+        std::memcpy(reinterpret_cast<void *>(b.begin), b.data, b.size);
     }
 
     // Free "freed" segments
-    for(auto freedSegment: freed) {
+    for (auto freedSegment: freed) {
         memReg->freeMemorySegment(freedSegment.first);
     }
 
@@ -196,12 +202,12 @@ bool Transaction::commit(MemoryRegion *memReg) {
 
 void Transaction::abort() {
     // Free allocated segments
-    for(auto s: allocated)
+    for (auto s: allocated)
         s.second.free();
 
     // Free outstanding commits
-    if(isRO) {
-        while(!outstandingCommits.empty()) {
+    if (isRO) {
+        while (!outstandingCommits.empty()) {
             auto c = outstandingCommits.front();
             outstandingCommits.pop();
             c.written.free();

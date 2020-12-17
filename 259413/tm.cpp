@@ -124,7 +124,7 @@ size_t tm_align(shared_t shared) noexcept {
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
-    auto *tx = new Transaction(is_ro);
+    auto *tx = new Transaction(is_ro, memReg->alignment);
     memReg->lockedForWrite([memReg, tx]() {
         memReg->txs.insert(tx);
         return true;

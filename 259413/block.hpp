@@ -30,16 +30,21 @@ public:
      */
     Block(uintptr_t begin, size_t size, void *data, bool isOwner = false);
 
-    Block copy() const;
+    Block copy(size_t alignment) const;
 
     void free();
 
     bool containedIn(MemorySegment segment) const;
 
     bool containedInAny(const std::unordered_map<void *, MemorySegment> &segments) const;
+
+    bool ownsData() const;
 };
 
 class Blocks {
+private:
+    size_t alignment;
+
 public:
     /**
      * Disjoint set of (ordered) blocks
@@ -47,6 +52,8 @@ public:
     std::map<uintptr_t, Block> blocks;
 
 public:
+    Blocks(size_t alignment);
+
     void add(Block block, bool copyData);
 
     Blocks intersect(Block block);

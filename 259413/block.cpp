@@ -7,8 +7,8 @@
 Block::Block(uintptr_t begin, size_t size, void *data, bool isOwner)
         : isOwner(isOwner), begin(begin), size(size), data(data) {}
 
-Block Block::copy() const {
-    void *cp = malloc(size);
+Block Block::copy(size_t alignment) const {
+    void *cp = aligned_alloc(alignment, size);
     std::memcpy(cp, reinterpret_cast<void *>(begin), size);
     return Block(begin, size, cp, true);
 }
@@ -29,6 +29,12 @@ bool Block::containedInAny(const std::unordered_map<void *, MemorySegment> &segm
         return containedIn(elem.second);
     });
 }
+
+bool Block::ownsData() const {
+    return isOwner;
+}
+
+Blocks::Blocks(size_t alignment) : alignment(alignment) {}
 
 void Blocks::add(Block block, bool copyData) {
     auto blockBegin = block.begin;
@@ -93,7 +99,7 @@ Blocks Blocks::intersect(Block block) {
     auto blockEnd = blockBegin + block.size;
 
     // Reference our blocks
-    Blocks result;
+    Blocks result(alignment);
     for (auto elem: blocks) {
         Block b = elem.second;
         auto begin = b.begin;
@@ -101,10 +107,9 @@ Blocks Blocks::intersect(Block block) {
 
         auto start = std::max(begin, blockBegin);
         auto finish = std::min(end, blockEnd);
-        auto size = finish - start;
-        if (size > 0) {
+        if (finish > start) {
             auto data = static_cast<char *>(b.data);
-            result.blocks.emplace(start, Block(start, size, data + start - begin));
+            result.blocks.emplace(start, Block(start, finish - start, data + start - begin));
         }
     }
 
@@ -118,7 +123,7 @@ Blocks Blocks::intersect(Block block) {
         auto end = it->first + it->second.size;
         auto next = std::next(it);
         auto nextBegin = next == result.blocks.end() ? blockEnd : next->first;
-        if(nextBegin > end)
+        if (nextBegin > end)
             result.blocks.emplace(end, Block(end, nextBegin - end, reinterpret_cast<void *>(end)));
         it++;
     }
@@ -150,9 +155,9 @@ bool Blocks::overlapsAny(const std::unordered_map<void *, MemorySegment> &segmen
 }
 
 Blocks Blocks::copy() const {
-    Blocks result;
+    Blocks result(alignment);
     for (auto elem: blocks) {
-        Block cp = elem.second.copy();
+        Block cp = elem.second.copy(alignment);
         result.blocks.emplace(cp.begin, cp);
     }
     return result;

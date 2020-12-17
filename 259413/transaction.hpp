@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <cstring>
 #include <queue>
+#include <cassert>
 
 #include "tm.hpp"
 #include "memoryRegion.hpp"
@@ -43,7 +44,7 @@ private:
     bool updateSnapshot(Commit c);
 
 public:
-    explicit Transaction(bool isRo);
+    explicit Transaction(bool isRo, size_t alignment);
 
     virtual ~Transaction();
 
