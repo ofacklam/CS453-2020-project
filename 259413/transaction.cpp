@@ -159,14 +159,19 @@ void Transaction::handleNewCommit(const Blocks &written, std::unordered_map<void
     if (isRO) {
         Blocks modified(written.alignment);
         for (auto elem: written.blocks) {
-            auto segment = memReg->findMemorySegment(reinterpret_cast<void *>(elem.second.begin));
-            auto begin = reinterpret_cast<uintptr_t>(segment.data);
-            modified.add(Block(begin, segment.size, segment.data), true);
+            if (writeCache.contains(elem.second) == nullptr) {
+                auto segment = memReg->findMemorySegment(reinterpret_cast<void *>(elem.second.begin));
+                auto begin = reinterpret_cast<uintptr_t>(segment.data);
+                modified.add(Block(begin, segment.size, segment.data), true);
+            }
         }
         for (auto elem: freedByOther) {
             auto segment = elem.second;
             auto begin = reinterpret_cast<uintptr_t>(segment.data);
-            modified.add(Block(begin, segment.size, segment.data), true);
+            Block segBlk(begin, segment.size, segment.data);
+            if (writeCache.contains(segBlk) == nullptr) {
+                modified.add(segBlk, true);
+            }
         }
         outstandingCommits.push(Commit(modified));
     } else {
@@ -188,7 +193,7 @@ bool Transaction::handleOutstandingCommits() {
     return true;
 }
 
-bool Transaction::updateSnapshot(Commit c) {
+bool Transaction::updateSnapshot(Commit &c) {
     if (isRO) {
         Blocks prevCache = writeCache;
         writeCache = c.written;
@@ -212,11 +217,14 @@ bool Transaction::updateSnapshot(Commit c) {
 
 bool
 Transaction::commit(const std::unordered_set<Transaction *> &txs, AbstractMemoryRegion *memReg) {
-    if (isAborted || !handleOutstandingCommits())
-        return false;
-
-    if (isRO)
+    if (isRO) {
+        abort(); // trick to free up memory, an RO-TX never aborts
         return true;
+    }
+
+    if (isAborted || !handleOutstandingCommits()) {
+        return false;
+    }
 
     // Let all other transactions handle this new commit
     for (auto tx: txs) {

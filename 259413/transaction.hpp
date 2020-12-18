@@ -44,7 +44,7 @@ private:
 
     bool handleOutstandingCommits();
 
-    bool updateSnapshot(Commit c);
+    bool updateSnapshot(Commit &c);
 
 public:
     explicit Transaction(bool isRo, size_t alignment);

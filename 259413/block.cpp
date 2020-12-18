@@ -147,15 +147,19 @@ bool Blocks::overlaps(Block block) const {
 }
 
 bool Blocks::overlaps(const Blocks &otherBlocks) {
-    return std::any_of(blocks.begin(), blocks.end(), [otherBlocks](std::pair<uintptr_t, Block> elem) {
-        return otherBlocks.overlaps(elem.second);
-    });
+    for (auto elem: blocks) {
+        if (otherBlocks.overlaps(elem.second))
+            return true;
+    }
+    return false;
 }
 
 bool Blocks::overlapsAny(const std::unordered_map<void *, MemorySegment> &segments) const {
-    return std::any_of(blocks.begin(), blocks.end(), [segments](std::pair<uintptr_t, Block> elem) {
-        return elem.second.containedInAny(segments);
-    });
+    for (auto elem: blocks) {
+        if (elem.second.containedInAny(segments))
+            return true;
+    }
+    return false;
 }
 
 const Block *Blocks::contains(Block block) const {
@@ -165,6 +169,21 @@ const Block *Blocks::contains(Block block) const {
             return &b;
     }
     return nullptr;
+
+    /*
+     *     if(blocks.empty())
+        return nullptr;
+
+    auto it = blocks.lower_bound(block.begin);
+    if (it == blocks.end() || it->second.begin > block.begin)
+        it--;
+
+    const Block &b = it->second;
+    if(b.begin <= block.begin && b.begin + b.size >= block.begin + block.size)
+        return &b;
+    else
+        return nullptr;
+     */
 }
 
 Blocks Blocks::copy() const {
