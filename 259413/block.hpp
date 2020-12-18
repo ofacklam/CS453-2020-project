@@ -31,7 +31,7 @@ public:
     Block(uintptr_t begin, size_t size, void *data, bool isOwner = false);
 
     // Default constructor
-    //Block();
+    Block() = default;
 
     Block copy(size_t alignment) const;
 
@@ -53,6 +53,8 @@ public:
      * Disjoint set of (ordered) blocks
      */
     std::map<uintptr_t, Block> blocks;
+    bool firstValid = false;
+    Block first;
 
 public:
     explicit Blocks(size_t alignment);

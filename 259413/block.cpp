@@ -78,9 +78,11 @@ void Blocks::add(Block block, bool copyData) {
 
     // Clean up all unused blocks
     for (auto it = blocks.begin(); it != blocks.end();) {
-        Block b = it->second;
+        Block &b = it->second;
         if (b.begin >= start && b.begin + b.size <= end) {
             b.free();
+            if (first.begin == b.begin)
+                firstValid = false;
             it = blocks.erase(it);
         } else {
             it++;
@@ -90,6 +92,10 @@ void Blocks::add(Block block, bool copyData) {
     // Create new block
     Block combined(start, size, data, copyData);
     blocks.emplace(start, combined);
+    if (!firstValid) {
+        first = combined;
+        firstValid = true;
+    }
 }
 
 Blocks Blocks::intersect(Block block) {
@@ -163,9 +169,16 @@ bool Blocks::overlapsAny(const std::unordered_map<void *, MemorySegment> &segmen
 }
 
 const Block *Blocks::contains(Block block) const {
+    auto start = block.begin;
+    auto end = start + block.size;
+
+    if (firstValid && first.begin <= start && first.begin + first.size >= end) {
+        return &first;
+    }
+
     for (auto &elem: blocks) {
         const Block &b = elem.second;
-        if (b.begin <= block.begin && b.begin + b.size >= block.begin + block.size)
+        if (b.begin <= start && b.begin + b.size >= end)
             return &b;
     }
     return nullptr;
