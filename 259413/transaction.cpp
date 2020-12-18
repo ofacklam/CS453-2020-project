@@ -42,14 +42,14 @@ bool Transaction::read(Block toRead, AbstractMemoryRegion *memReg) {
         }
 
         // Add into write-cache for future use if RO
-        if(isRO && writeCache.contains(toRead) == nullptr) {
+        if (isRO && writeCache.contains(toRead) == nullptr) {
             auto readSegment = memReg->findMemorySegment(reinterpret_cast<void *>(toRead.begin));
             auto segBegin = reinterpret_cast<uintptr_t>(readSegment.data);
             Block segBlk(segBegin, readSegment.size, readSegment.data);
 
             Blocks edits = writeCache.intersect(segBlk);
             writeCache.add(segBlk, true);
-            for(auto edit: edits.blocks) {
+            for (auto edit: edits.blocks) {
                 writeCache.add(edit.second, true);
             }
         }
@@ -130,7 +130,7 @@ Alloc Transaction::allocate(size_t size, size_t alignment, void **target) {
     }
 }
 
-bool Transaction::free(void *segment, std::function<MemorySegment(void *)> getMemorySegment) {
+bool Transaction::free(void *segment, AbstractMemoryRegion *memReg) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
@@ -147,19 +147,19 @@ bool Transaction::free(void *segment, std::function<MemorySegment(void *)> getMe
         allocated.erase(segment);
         return true;
     } else {
-        freed.emplace(segment, getMemorySegment(segment));
+        freed.emplace(segment, memReg->getMemorySegment(segment));
         return true;
     }
 }
 
 void Transaction::handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freedByOther,
-                                  const std::function<MemorySegment(void *)> &findMemorySegment) {
+                                  AbstractMemoryRegion *memReg) {
     std::unique_lock lock(commitMutex);
 
     if (isRO) {
         Blocks modified(written.alignment);
         for (auto elem: written.blocks) {
-            auto segment = findMemorySegment(reinterpret_cast<void *>(elem.second.begin));
+            auto segment = memReg->findMemorySegment(reinterpret_cast<void *>(elem.second.begin));
             auto begin = reinterpret_cast<uintptr_t>(segment.data);
             modified.add(Block(begin, segment.size, segment.data), true);
         }
@@ -211,10 +211,7 @@ bool Transaction::updateSnapshot(Commit c) {
 }
 
 bool
-Transaction::commit(const std::unordered_set<Transaction *> &txs,
-                    const std::function<void(MemorySegment)> &addMemorySegment,
-                    const std::function<void(void *)> &freeMemorySegment,
-                    const std::function<MemorySegment(void *)> &findMemorySegment) {
+Transaction::commit(const std::unordered_set<Transaction *> &txs, AbstractMemoryRegion *memReg) {
     if (isAborted || !handleOutstandingCommits())
         return false;
 
@@ -224,12 +221,12 @@ Transaction::commit(const std::unordered_set<Transaction *> &txs,
     // Let all other transactions handle this new commit
     for (auto tx: txs) {
         if (tx != this)
-            tx->handleNewCommit(writeCache, freed, findMemorySegment);
+            tx->handleNewCommit(writeCache, freed, memReg);
     }
 
     // Add allocated segments
     for (auto newSegment: allocated) {
-        addMemorySegment(newSegment.second);
+        memReg->addMemorySegment(newSegment.second);
     }
 
     // Write contents of writeCache
@@ -240,7 +237,7 @@ Transaction::commit(const std::unordered_set<Transaction *> &txs,
 
     // Free "freed" segments
     for (auto freedSegment: freed) {
-        freeMemorySegment(freedSegment.first);
+        memReg->freeMemorySegment(freedSegment.first);
     }
 
     return true;

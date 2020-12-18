@@ -142,12 +142,7 @@ bool tm_end(shared_t shared, tx_t tx) noexcept {
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     bool success = memReg->lockedForWrite([memReg, transaction]() {
         memReg->txs.erase(transaction);
-        return transaction->commit(
-                memReg->txs,
-                [memReg](MemorySegment seg) { memReg->addMemorySegment(seg); },
-                [memReg](void *ptr) { memReg->freeMemorySegment(ptr); },
-                [memReg](void *ptr) { return memReg->findMemorySegment(ptr); }
-        );
+        return transaction->commit(memReg->txs, memReg);
     });
     delete transaction;
     return success;
@@ -165,14 +160,7 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size, void *ta
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     Block toRead(reinterpret_cast<uintptr_t>(source), size, target);
-    bool success = transaction->read(
-            toRead,
-            memReg
-            //std::bind(&MemoryRegion::lockedForRead, memReg, std::placeholders::_1),
-            //[memReg](const std::function<bool()> &op) { return memReg->lockedForRead(op); },
-            //std::bind(&MemoryRegion::findMemorySegment, memReg, std::placeholders::_1)
-            //[memReg](void *ptr) { return memReg->findMemorySegment(ptr); }
-    );
+    bool success = transaction->read(toRead, memReg);
     if (!success)
         memReg->deleteTransaction(transaction);
     return success;
@@ -223,9 +211,7 @@ bool tm_free(shared_t shared, tx_t tx, void *target) noexcept {
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     bool success = memReg->lockedForRead([memReg, transaction, target]() {
-        return transaction->free(target, [memReg](void *ptr) {
-            return memReg->getMemorySegment(ptr);
-        });
+        return transaction->free(target, memReg);
     });
     if (!success)
         memReg->deleteTransaction(transaction);

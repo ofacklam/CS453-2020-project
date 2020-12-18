@@ -57,15 +57,12 @@ public:
 
     Alloc allocate(size_t size, size_t alignment, void **target);
 
-    bool free(void *segment, std::function<MemorySegment(void *)> getMemorySegment);
+    bool free(void *segment, AbstractMemoryRegion *memReg);
 
     void handleNewCommit(const Blocks &written, std::unordered_map<void *, MemorySegment> freed,
-                         const std::function<MemorySegment(void *)> &findMemorySegment);
+                         AbstractMemoryRegion *memReg);
 
-    bool commit(const std::unordered_set<Transaction *> &txs,
-                const std::function<void(MemorySegment)> &addMemorySegment,
-                const std::function<void(void *)> &freeMemorySegment,
-                const std::function<MemorySegment(void *)> &findMemorySegment);
+    bool commit(const std::unordered_set<Transaction *> &txs, AbstractMemoryRegion *memReg);
 
     void abort();
 };
