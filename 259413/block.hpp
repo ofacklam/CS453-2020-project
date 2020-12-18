@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <algorithm>
 #include <cstring>
 

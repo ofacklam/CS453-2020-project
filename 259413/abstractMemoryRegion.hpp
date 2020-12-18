@@ -5,6 +5,8 @@
 #ifndef CS453_2020_PROJECT_ABSTRACTMEMORYREGION_HPP
 #define CS453_2020_PROJECT_ABSTRACTMEMORYREGION_HPP
 
+#include <functional>
+
 class Transaction;
 
 class AbstractMemoryRegion {
