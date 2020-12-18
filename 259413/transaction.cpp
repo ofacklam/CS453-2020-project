@@ -19,20 +19,19 @@ Transaction::~Transaction() {
     writeCache.free();
 }
 
-bool Transaction::read(Block toRead, const std::function<bool(std::function<bool()>)> &lockedForRead) {
+bool Transaction::read(Block toRead, AbstractMemoryRegion *memReg) {
     // Shortcut for read-only TX
     if (isRO) {
-        auto begin = writeCache.contains(toRead);
-        if (begin > 0) {
-            Block b = writeCache.blocks.at(begin);
-            auto offset = toRead.begin - b.begin;
-            std::memcpy(toRead.data, static_cast<char *>(b.data) + offset, toRead.size);
+        auto block = writeCache.contains(toRead);
+        if (block != nullptr) {
+            auto offset = toRead.begin - block->begin;
+            std::memcpy(toRead.data, static_cast<char *>(block->data) + offset, toRead.size);
             return true;
         }
     }
 
     // Else we need lock
-    return lockedForRead([this, toRead]() {
+    return memReg->lockedForRead([this, toRead, memReg]() {
         if (isAborted || !handleOutstandingCommits())
             return false;
 
@@ -40,6 +39,19 @@ bool Transaction::read(Block toRead, const std::function<bool(std::function<bool
         if (!isRO && toRead.containedInAny(freedByOthers)) {
             abort();
             return false;
+        }
+
+        // Add into write-cache for future use if RO
+        if(isRO && writeCache.contains(toRead) == nullptr) {
+            auto readSegment = memReg->findMemorySegment(reinterpret_cast<void *>(toRead.begin));
+            auto segBegin = reinterpret_cast<uintptr_t>(readSegment.data);
+            Block segBlk(segBegin, readSegment.size, readSegment.data);
+
+            Blocks edits = writeCache.intersect(segBlk);
+            writeCache.add(segBlk, true);
+            for(auto edit: edits.blocks) {
+                writeCache.add(edit.second, true);
+            }
         }
 
         // Intersect block with write cache, then copy out data

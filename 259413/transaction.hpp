@@ -16,6 +16,7 @@
 #include "tm.hpp"
 #include "block.hpp"
 #include "memorySegment.hpp"
+#include "abstractMemoryRegion.hpp"
 
 class Commit {
 public:
@@ -50,7 +51,7 @@ public:
 
     virtual ~Transaction();
 
-    bool read(Block toRead, const std::function<bool(std::function<bool()>)> &lockedForRead);
+    bool read(Block toRead, AbstractMemoryRegion *memReg);
 
     bool write(Block toWrite);
 

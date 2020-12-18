@@ -25,10 +25,12 @@ public:
     /**
      * Constructors:
      * 1. reference to existing data, not owned
-     * 2. newly allocated, owned
-     * 3. copy of existing data, owned
+     * 2. copy of existing data, owned
      */
     Block(uintptr_t begin, size_t size, void *data, bool isOwner = false);
+
+    // Default constructor
+    //Block();
 
     Block copy(size_t alignment) const;
 
@@ -52,7 +54,7 @@ public:
     std::map<uintptr_t, Block> blocks;
 
 public:
-    Blocks(size_t alignment);
+    explicit Blocks(size_t alignment);
 
     void add(Block block, bool copyData);
 
@@ -60,11 +62,11 @@ public:
 
     bool overlaps(Block block) const;
 
-    bool overlaps(const Blocks& otherBlocks);
+    bool overlaps(const Blocks &otherBlocks);
 
     bool overlapsAny(const std::unordered_map<void *, MemorySegment> &segments) const;
 
-    uintptr_t contains(Block block) const;
+    const Block *contains(Block block) const;
 
     Blocks copy() const;
 

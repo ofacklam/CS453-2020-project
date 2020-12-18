@@ -165,9 +165,14 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size, void *ta
     auto *memReg = reinterpret_cast<MemoryRegion *>(shared);
     auto *transaction = reinterpret_cast<Transaction *>(tx);
     Block toRead(reinterpret_cast<uintptr_t>(source), size, target);
-    bool success = transaction->read(toRead, [memReg](const std::function<bool()> &op) {
-        return memReg->lockedForRead(op);
-    });
+    bool success = transaction->read(
+            toRead,
+            memReg
+            //std::bind(&MemoryRegion::lockedForRead, memReg, std::placeholders::_1),
+            //[memReg](const std::function<bool()> &op) { return memReg->lockedForRead(op); },
+            //std::bind(&MemoryRegion::findMemorySegment, memReg, std::placeholders::_1)
+            //[memReg](void *ptr) { return memReg->findMemorySegment(ptr); }
+    );
     if (!success)
         memReg->deleteTransaction(transaction);
     return success;

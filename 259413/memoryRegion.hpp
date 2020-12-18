@@ -14,8 +14,9 @@
 
 #include "transaction.hpp"
 #include "memorySegment.hpp"
+#include "abstractMemoryRegion.hpp"
 
-class MemoryRegion {
+class MemoryRegion : public AbstractMemoryRegion {
 private:
     /**
      * Store memory segment pointers
@@ -25,7 +26,7 @@ private:
     /**
      * Mutex to lock for reading / writing shared memory (when reading or committing)
      */
-     std::shared_mutex sharedMutex;
+    std::shared_mutex sharedMutex;
 
 public:
     MemorySegment firstSegment;
@@ -41,19 +42,19 @@ public:
 
     virtual ~MemoryRegion();
 
-    bool lockedForRead(const std::function<bool()>& readOp);
+    bool lockedForRead(const std::function<bool()> &readOp) override;
 
-    bool lockedForWrite(const std::function<bool()>& writeOp);
+    bool lockedForWrite(const std::function<bool()> &writeOp) override;
 
-    MemorySegment getMemorySegment(void *ptr);
+    MemorySegment getMemorySegment(void *ptr) override;
 
-    MemorySegment findMemorySegment(void *ptr);
+    MemorySegment findMemorySegment(void *ptr) override;
 
-    void addMemorySegment(MemorySegment segment);
+    void addMemorySegment(MemorySegment segment) override;
 
-    void freeMemorySegment(void *ptr);
+    void freeMemorySegment(void *ptr) override;
 
-    void deleteTransaction(Transaction *tx);
+    void deleteTransaction(Transaction *tx) override;
 };
 
 

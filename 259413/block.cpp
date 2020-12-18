@@ -7,6 +7,10 @@
 Block::Block(uintptr_t begin, size_t size, void *data, bool isOwner)
         : isOwner(isOwner), begin(begin), size(size), data(data) {}
 
+/*Block::Block() {
+    throw std::runtime_error("No block default-allocation!");
+}*/
+
 Block Block::copy(size_t alignment) const {
     void *cp = aligned_alloc(alignment, size);
     std::memcpy(cp, reinterpret_cast<void *>(begin), size);
@@ -40,30 +44,19 @@ void Blocks::add(Block block, bool copyData) {
     auto blockBegin = block.begin;
     auto blockEnd = blockBegin + block.size;
 
-    // Find start of combined block
-    // https://stackoverflow.com/a/41169879
-    uintptr_t start;
-    auto it = blocks.lower_bound(blockBegin);
-    if (blocks.empty() || it == blocks.begin()) {
-        start = blockBegin;
-    } else {
-        it--;
-        auto prevEnd = it->second.begin + it->second.size;
-        start = blockBegin <= prevEnd ? it->first : blockBegin;
-    }
-
-    // Find end of combined block
-    uintptr_t end;
-    uintptr_t extBegin;
-    it = blocks.lower_bound(blockEnd);
-    if (blocks.empty() || (it == blocks.begin() && it->first > blockEnd)) {
-        end = blockEnd;
-    } else {
-        if (it == blocks.end() || it->first > blockEnd)
-            it--;
-        extBegin = it->second.begin;
-        auto extEnd = extBegin + it->second.size;
-        end = std::max(blockEnd, extEnd);
+    // Find combined block ends
+    uintptr_t start = blockBegin;
+    uintptr_t extBegin = 0;
+    uintptr_t end = blockEnd;
+    for (auto elem: blocks) {
+        Block b = elem.second;
+        auto bEnd = b.begin + b.size;
+        if (b.begin < start && bEnd >= blockBegin)
+            start = b.begin;
+        if (bEnd > end && b.begin <= blockEnd) {
+            end = bEnd;
+            extBegin = b.begin;
+        }
     }
 
     // Copy data if needed
@@ -84,10 +77,14 @@ void Blocks::add(Block block, bool copyData) {
     }
 
     // Clean up all unused blocks
-    it = blocks.lower_bound(start);
-    while (it != blocks.end() && it->first < end) {
-        it->second.free();
-        it = blocks.erase(it);
+    for (auto it = blocks.begin(); it != blocks.end();) {
+        Block b = it->second;
+        if (b.begin >= start && b.begin + b.size <= end) {
+            b.free();
+            it = blocks.erase(it);
+        } else {
+            it++;
+        }
     }
 
     // Create new block
@@ -141,9 +138,9 @@ bool Blocks::overlaps(Block block) const {
         disjointPrev |= it->first + it->second.size <= block.begin;
     }
     return !disjointNext || !disjointPrev;*/
-    for(auto elem: blocks) {
+    for (auto elem: blocks) {
         Block b = elem.second;
-        if(b.begin < block.begin + block.size && block.begin < b.begin + b.size)
+        if (b.begin < block.begin + block.size && block.begin < b.begin + b.size)
             return true;
     }
     return false;
@@ -161,13 +158,13 @@ bool Blocks::overlapsAny(const std::unordered_map<void *, MemorySegment> &segmen
     });
 }
 
-uintptr_t Blocks::contains(Block block) const {
-    for(auto elem: blocks) {
-        Block b = elem.second;
-        if(b.begin <= block.begin && b.begin + b.size >= block.begin + block.size)
-            return b.begin;
+const Block *Blocks::contains(Block block) const {
+    for (auto &elem: blocks) {
+        const Block &b = elem.second;
+        if (b.begin <= block.begin && b.begin + b.size >= block.begin + block.size)
+            return &b;
     }
-    return 0;
+    return nullptr;
 }
 
 Blocks Blocks::copy() const {
